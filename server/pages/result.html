@@ -1,0 +1,11 @@
+{{define "result"}}
+<li id="result-{{.ID}}" class="result">
+  <span>{{.Text}}</span>
+  <a href="{{.URL}}" target="_blank">link</a>
+</li>
+{{end}} {{define "searchForm"}}
+<form hx-post="/goals" hx-swap="outerHTML">
+  <input autofocus type="text" name="name" placeholder="goals" />
+  <button type="submit">add goal</button>
+</form>
+{{end}}

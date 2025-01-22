@@ -1,0 +1,6 @@
+{{define "searchForm"}}
+<form hx-post="/search" hx-swap="outerHTML">
+  <input autofocus type="text" name="name" placeholder="query" />
+  <button type="submit">search</button>
+</form>
+{{end}}
