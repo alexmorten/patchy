@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 
 	"github.com/alexmorten/livereload"
 	"github.com/meilisearch/meilisearch-go"
@@ -22,10 +23,25 @@ type Page struct {
 }
 
 func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+
 	page := &Page{
 		EnableLiveReload: s.IsDev,
 		LiveReloadScript: livereload.LiveReloadScriptHTML(),
 		Hits:             []interface{}{},
+	}
+	if query != "" {
+		searchRes, err := s.searchClient.Index("documents").Search(query,
+			&meilisearch.SearchRequest{
+				AttributesToHighlight: []string{"Text"},
+				Limit:                 100,
+			})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		page.Hits = s.convertHits(searchRes.Hits)
+		page.Query = query
 	}
 
 	err := s.getTemplate().ExecuteTemplate(w, "index.html", page)
@@ -50,7 +66,8 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 		Hits:  s.convertHits(searchRes.Hits),
 		Query: query,
 	}
-
+	w.Header().Add("HX-Replace-Url", "/?q="+url.QueryEscape(query))
+	w.WriteHeader(200)
 	err = s.getTemplate().ExecuteTemplate(w, "searchResponse.html", page)
 	if err != nil {
 		fmt.Println(err)

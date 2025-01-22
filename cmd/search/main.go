@@ -10,7 +10,7 @@ import (
 func main() {
 	client := meilisearch.New("http://localhost:7700")
 
-	searchRes, err := client.Index("documents").Search("xss",
+	searchRes, err := client.Index("documents").Search("uring",
 		&meilisearch.SearchRequest{
 			AttributesToHighlight: []string{"Text"},
 			Limit:                 10,

@@ -45,10 +45,16 @@ func (q *Queries) GetDocumentByID(ctx context.Context, id int64) (Doc, error) {
 const listDocuments = `-- name: ListDocuments :many
 SELECT id, text, url FROM docs
 ORDER BY id
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) ListDocuments(ctx context.Context) ([]Doc, error) {
-	rows, err := q.db.Query(ctx, listDocuments)
+type ListDocumentsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]Doc, error) {
+	rows, err := q.db.Query(ctx, listDocuments, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

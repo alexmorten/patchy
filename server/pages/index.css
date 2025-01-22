@@ -24,17 +24,20 @@ ul {
 }
 
 .result {
-  max-width: 500px;
+  /* max-width: 500px; */
   margin: 0;
-  padding: 5 0px;
+  padding: 5px 0px;
   margin-top: 20px;
 
-  display: flex;
-  justify-content: space-between;
+  white-space: pre;
+
+  font-family: monospace;
+  overflow-x: scroll;
+  border-bottom: 1px solid black;
 }
 
 form {
-  margin-top: 10px;
+  margin-top: 20px;
 }
 
 em {
