@@ -22,9 +22,6 @@ type Page struct {
 }
 
 func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
-
-	fmt.Println("index")
-
 	page := &Page{
 		EnableLiveReload: s.IsDev,
 		LiveReloadScript: livereload.LiveReloadScriptHTML(),
