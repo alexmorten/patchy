@@ -3,10 +3,12 @@
   <input
     autofocus
     type="text"
-    name="name"
+    name="query"
     placeholder="query"
     value="{{.Query}}"
   />
   <button type="submit">search</button>
+
+  {{ range .Hits }} {{template "result" .}} {{ end }}
 </form>
 {{end}}

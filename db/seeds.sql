@@ -20,4 +20,8 @@ VALUES
   ('Example text 17', 'http://example.com/17'),
   ('Example text 18', 'http://example.com/18'),
   ('Example text 19', 'http://example.com/19'),
-  ('Example text 20', 'http://example.com/20');
+  ('Example text 20', 'http://example.com/20'),
+  (
+    'Example <script>alert("xss!")</script> script',
+    'http://example.com/xss'
+  );
