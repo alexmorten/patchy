@@ -10,28 +10,31 @@ import (
 )
 
 func (s *Server) addSearchRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /search", s.searchHandler)
+	mux.HandleFunc("POST /search", s.searchHandler)
 	mux.HandleFunc("GET /", s.indexHandler)
 }
 
-func (s *Server) indexHandler(w http.ResponseWriter, _ *http.Request) {
-	type Page struct {
-		EnableLiveReload bool
-		LiveReloadScript template.HTML
-		Hits             []map[string]interface{}
-	}
+type Page struct {
+	EnableLiveReload bool
+	LiveReloadScript template.HTML
+	Hits             []interface{}
+	Query            string
+}
+
+func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("index")
 
 	page := &Page{
 		EnableLiveReload: s.IsDev,
 		LiveReloadScript: livereload.LiveReloadScriptHTML(),
-		Hits: []map[string]interface{}{
-			{"ID": 1,
-				"Text": "Hello World",
-				"URL":  "http://example.com",
-			}},
+		Hits:             []interface{}{},
 	}
-	fmt.Println("index")
-	s.getTemplate().ExecuteTemplate(w, "index.html", page)
+
+	err := s.getTemplate().ExecuteTemplate(w, "index.html", page)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -46,5 +49,14 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.getTemplate().ExecuteTemplate(w, "index.html", searchRes)
+	page := Page{
+		Hits:  searchRes.Hits,
+		Query: query,
+	}
+
+	err = s.getTemplate().ExecuteTemplate(w, "searchResponse.html", page)
+	if err != nil {
+		fmt.Println(err)
+	}
+
 }

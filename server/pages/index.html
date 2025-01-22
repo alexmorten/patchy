@@ -17,11 +17,10 @@
 
     <h1>Patchy</h1>
 
-    <span>Search Linux mailling lists quickly</span>
+    <span>Search Linux mailling lists</span>
 
     <ul>
-      {{ range .Hits }} {{template "result" .}} {{ end }} {{ template
-      "searchForm" .}}
+      {{ template "searchForm" .}}
     </ul>
   </body>
 </html>

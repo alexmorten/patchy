@@ -16,7 +16,7 @@ type Server struct {
 	IsDev        bool
 }
 
-var templateNames = []string{"server/pages/index.css", "server/pages/result.html", "server/pages/index.html", "server/pages/searchForm.html"}
+var templateNames = []string{"server/pages/index.css", "server/pages/result.html", "server/pages/index.html", "server/pages/searchForm.html", "server/pages/searchResponse.html"}
 
 func NewServer(isDev bool, querier *db.Queries) *Server {
 	return &Server{
@@ -30,7 +30,7 @@ func NewServer(isDev bool, querier *db.Queries) *Server {
 func (s *Server) ListenAndServe() error {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("server/pages/assets"))))
+	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("server/pages/assets"))))
 	s.addSearchRoutes(mux)
 	if s.IsDev {
 		livereload.HandleLiveReload(mux, "server/pages", "server/pages/assets")
