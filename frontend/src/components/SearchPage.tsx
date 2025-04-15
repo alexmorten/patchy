@@ -14,15 +14,22 @@ interface SearchResultData {
 export function SearchPage() {
   const [searchResults, setSearchResults] = useState<SearchResultData[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get('q') || '';
+  const initialQuery = searchParams.get('q') || '';
+  const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery] = useDebounce(query, 200);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debouncedSetSearchParams] = useDebounce((newQuery: string) => {
+    const params = new URLSearchParams();
+    if (newQuery) {
+      params.set('q', newQuery);
+    }
+    setSearchParams(params);
+  }, 300);
 
   useEffect(() => {
     const performSearch = async () => {
-      if (!debouncedQuery.trim()) {
-        setSearchResults([]);
+      if (!debouncedQuery.trim() || debouncedQuery.trim().length < 3) {
         return;
       }
 
@@ -44,7 +51,8 @@ export function SearchPage() {
   }, [debouncedQuery]);
 
   const handleSearch = (newQuery: string) => {
-    setSearchParams(newQuery ? { q: newQuery } : {});
+    setQuery(newQuery);
+    debouncedSetSearchParams(newQuery);
   };
 
   return (
