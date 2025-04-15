@@ -90,12 +90,25 @@
   font-size: 1.25rem;
 }
 
+.result-link {
+  color: var(--accent-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.result-link:hover {
+  color: var(--text-primary);
+}
+
 .result-content {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.9rem;
   line-height: 1.6;
   white-space: pre-wrap;
   word-wrap: break-word;
+  max-height: 800px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
 }
 
 .result-content mark {

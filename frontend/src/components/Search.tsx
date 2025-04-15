@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { search } from '../services/api';
+import { SearchResult } from './SearchResult';
 import '../styles/Search.css';
 
-interface SearchResult {
+interface SearchResultData {
   id: string;
   text: string;
   url: string;
+}
+
+interface SearchProps {
+  onResultsChange: (results: SearchResultData[]) => void;
 }
 
 const highlightText = (text: string, query: string) => {
@@ -14,9 +19,9 @@ const highlightText = (text: string, query: string) => {
   return text.replace(regex, '<mark>$1</mark>');
 };
 
-export const Search = () => {
+export const Search = ({ onResultsChange }: SearchProps) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<SearchResultData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +35,7 @@ export const Search = () => {
     try {
       const data = await search(query);
       setResults(data);
+      onResultsChange(data);
     } catch (err) {
       setError('Failed to fetch search results');
       console.error(err);
@@ -57,17 +63,11 @@ export const Search = () => {
 
       <div className="results-container">
         {results.map((result) => (
-          <div key={result.id} className="result-item">
-            <h3 className="result-title">
-              <a href={result.url} target="_blank" rel="noopener noreferrer">
-                {result.id}
-              </a>
-            </h3>
-            <p 
-              className="result-content" 
-              dangerouslySetInnerHTML={{ __html: highlightText(result.text, query) }} 
-            />
-          </div>
+          <SearchResult
+            key={result.id}
+            id={result.id}
+            text={highlightText(result.text, query)}
+          />
         ))}
       </div>
     </div>

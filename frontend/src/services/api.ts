@@ -25,4 +25,25 @@ export const search = async (query: string) => {
   }
 };
 
+export const getResult = async (id: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/result/${id}`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const error = new Error('Result request failed') as ApiError;
+      error.status = response.status;
+      throw error;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Result error:', error);
+    throw error;
+  }
+};
+
 export default API_BASE_URL; 
