@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { search } from '../services/api';
 import { SearchResult } from './SearchResult';
 import '../styles/Search.css';
@@ -12,6 +11,10 @@ interface SearchResultData {
 interface SearchProps {
   results: SearchResultData[];
   onResultsChange: (results: SearchResultData[]) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const highlightText = (text: string, query: string) => {
@@ -20,26 +23,23 @@ const highlightText = (text: string, query: string) => {
   return text.replace(regex, '<mark>$1</mark>');
 };
 
-export const Search = ({ results, onResultsChange }: SearchProps) => {
-  const [query, setQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+export const Search = ({ 
+  results, 
+  onResultsChange, 
+  query, 
+  onQueryChange,
+  isLoading,
+  error
+}: SearchProps) => {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-
-    setIsLoading(true);
-    setError(null);
 
     try {
       const data = await search(query);
       onResultsChange(data);
     } catch (err) {
-      setError('Failed to fetch search results');
       console.error(err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -49,7 +49,7 @@ export const Search = ({ results, onResultsChange }: SearchProps) => {
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search..."
           className="search-input"
         />

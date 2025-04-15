@@ -1,18 +1,9 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { useState } from 'react';
-import { Search } from './components/Search';
+import { SearchPage } from './components/SearchPage';
 import { SearchResultDetail } from './components/SearchResultDetail';
 import './styles/App.css';
 
-interface SearchResultData {
-  id: string;
-  text: string;
-  url: string;
-}
-
 function App() {
-  const [searchResults, setSearchResults] = useState<SearchResultData[]>([]);
-
   return (
     <Router>
       <div className="app">
@@ -23,16 +14,11 @@ function App() {
           <Routes>
             <Route 
               path="/" 
-              element={
-                <Search 
-                  results={searchResults}
-                  onResultsChange={setSearchResults} 
-                />
-              } 
+              element={<SearchPage />}
             />
             <Route 
               path="/result/:id" 
-              element={<SearchResultDetail results={searchResults} />} 
+              element={<SearchResultDetail results={[]} />} 
             />
           </Routes>
         </main>
