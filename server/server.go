@@ -20,7 +20,7 @@ func NewServer(isDev bool, querier *db.Queries) *Server {
 		IsDev:           isDev,
 		querier:         querier,
 		searchClient:    meilisearch.New("http://localhost:7700"),
-		sanitizerPolicy: bluemonday.NewPolicy().AllowElements("em"),
+		sanitizerPolicy: bluemonday.NewPolicy().AllowElements("em", "mark"),
 	}
 }
 

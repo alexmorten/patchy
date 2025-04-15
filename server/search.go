@@ -40,10 +40,11 @@ func (s *Server) jsonSearchHandler(w http.ResponseWriter, r *http.Request) {
 		hitMap := hit.(map[string]interface{})
 		formatted := hitMap["_formatted"].(map[string]interface{})
 		formattedText := formatted["Text"].(string)
+		sanitizedText := s.sanitizerPolicy.Sanitize(formattedText)
 
 		results = append(results, SearchResult{
 			ID:   fmt.Sprintf("%d", int(hitMap["ID"].(float64))),
-			Text: formattedText,
+			Text: sanitizedText,
 			URL:  hitMap["Url"].(string),
 		})
 	}
