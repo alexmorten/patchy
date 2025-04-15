@@ -23,23 +23,20 @@ func (s *Server) jsonResultHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ID parameter is required", http.StatusBadRequest)
 		return
 	}
-	fmt.Println("id", id)
+
 	// Convert string ID to int for database
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		http.Error(w, "Invalid ID format", http.StatusBadRequest)
 		return
 	}
-	fmt.Println("idInt", idInt)
+
 	// Get the document from the database
 	doc, err := s.querier.GetDocumentByID(r.Context(), int64(idInt))
 	if err != nil {
-		fmt.Println("error", err)
-
 		http.Error(w, "Document not found", http.StatusNotFound)
 		return
 	}
-	fmt.Println(doc)
 
 	// Sanitize the text
 	sanitizedText := s.sanitizerPolicy.Sanitize(doc.Text)
@@ -57,5 +54,4 @@ func (s *Server) jsonResultHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
-
 }
