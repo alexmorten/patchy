@@ -113,15 +113,31 @@
 
 .result-content mark {
   background-color: var(--accent-color);
-  color: var(--text-primary);
+  color: #000000;
   padding: 0.1em 0.2em;
   border-radius: 2px;
 }
 
 .result-content em {
   background-color: var(--accent-color);
-  color: var(--text-primary);
+  color: #000000;
   font-style: normal;
   padding: 0.1em 0.2em;
   border-radius: 2px;
+}
+
+.expand-button {
+  background-color: var(--accent-color);
+  color: #000000;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.expand-button:hover {
+  background-color: #00cc00;
+  color: #000000;
 } 

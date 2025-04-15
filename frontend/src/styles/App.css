@@ -1,12 +1,12 @@
 :root {
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #2d2d2d;
-  --bg-gradient-start: #1a1a1a;
-  --bg-gradient-end: #2a2a2a;
-  --text-primary: #ffffff;
-  --text-secondary: #b3b3b3;
-  --accent-color: #007acc;
-  --border-color: #404040;
+  --bg-primary: #000000;
+  --bg-secondary: #1a1a1a;
+  --bg-gradient-start: #000000;
+  --bg-gradient-end: #1a1a1a;
+  --text-primary: #33ff33;
+  --text-secondary: #99ff99;
+  --accent-color: #33ff33;
+  --border-color: #006600;
 }
 
 * {
@@ -68,7 +68,7 @@ button {
 }
 
 button:hover {
-  background-color: #0066b3;
+  background-color: #00cc00;
 }
 
 input, textarea {
