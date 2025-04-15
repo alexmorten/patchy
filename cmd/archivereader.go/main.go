@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alexmorten/patchy/db"
+	"github.com/alexmorten/patchy/internal/email"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -36,14 +37,21 @@ func main() {
 			continue
 		}
 		text += line + "\n"
-
 	}
 }
 
 func insertMessage(text string, querier *db.Queries) {
+	messageID := email.ExtractMessageID(text)
+	if messageID == "" {
+		fmt.Println("Warning: No Message-ID found in message:")
+		fmt.Println(text)
+		return
+	}
+
 	_, err := querier.CreateDocument(context.Background(), db.CreateDocumentParams{
-		Text: text,
-		Url:  "",
+		Text:      text,
+		Url:       messageID,
+		MessageID: messageID,
 	})
 
 	if err != nil {
