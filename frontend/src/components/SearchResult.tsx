@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 interface SearchResultProps {
   id: string;
@@ -10,6 +10,7 @@ export const SearchResult = ({ id, text }: SearchResultProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (contentRef.current) {
@@ -24,9 +25,12 @@ export const SearchResult = ({ id, text }: SearchResultProps) => {
   return (
     <div className="result-item">
       <h3 className="result-title">
-        <Link to={`/result/${id}`} className="result-link">
+        <button 
+          className="result-link"
+          onClick={() => navigate(`/result/${id}`)}
+        >
           {id}
-        </Link>
+        </button>
       </h3>
       <div 
         ref={contentRef}

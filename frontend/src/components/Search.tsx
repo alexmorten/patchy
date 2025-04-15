@@ -10,6 +10,7 @@ interface SearchResultData {
 }
 
 interface SearchProps {
+  results: SearchResultData[];
   onResultsChange: (results: SearchResultData[]) => void;
 }
 
@@ -19,9 +20,8 @@ const highlightText = (text: string, query: string) => {
   return text.replace(regex, '<mark>$1</mark>');
 };
 
-export const Search = ({ onResultsChange }: SearchProps) => {
+export const Search = ({ results, onResultsChange }: SearchProps) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResultData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +34,6 @@ export const Search = ({ onResultsChange }: SearchProps) => {
 
     try {
       const data = await search(query);
-      setResults(data);
       onResultsChange(data);
     } catch (err) {
       setError('Failed to fetch search results');

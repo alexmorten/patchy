@@ -23,7 +23,12 @@ function App() {
           <Routes>
             <Route 
               path="/" 
-              element={<Search onResultsChange={setSearchResults} />} 
+              element={
+                <Search 
+                  results={searchResults}
+                  onResultsChange={setSearchResults} 
+                />
+              } 
             />
             <Route 
               path="/result/:id" 
