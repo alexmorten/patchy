@@ -15,6 +15,7 @@ interface SearchProps {
   onQueryChange: (query: string) => void;
   isLoading: boolean;
   error: string | null;
+  autoFocus?: boolean;
 }
 
 const highlightText = (text: string, query: string) => {
@@ -29,7 +30,8 @@ export const Search = ({
   query, 
   onQueryChange,
   isLoading,
-  error
+  error,
+  autoFocus = false
 }: SearchProps) => {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +54,7 @@ export const Search = ({
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search..."
           className="search-input"
+          autoFocus={autoFocus}
         />
         <button type="submit" className="search-button" disabled={isLoading}>
           {isLoading ? 'Searching...' : 'Search'}

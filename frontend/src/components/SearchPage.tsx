@@ -11,8 +11,12 @@ interface SearchResultData {
   url: string;
 }
 
-export function SearchPage() {
-  const [searchResults, setSearchResults] = useState<SearchResultData[]>([]);
+interface SearchPageProps {
+  searchResults: SearchResultData[];
+  onSearchResultsChange: (results: SearchResultData[]) => void;
+}
+
+export function SearchPage({ searchResults, onSearchResultsChange }: SearchPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   const [query, setQuery] = useState(initialQuery);
@@ -38,7 +42,7 @@ export function SearchPage() {
 
       try {
         const data = await search(debouncedQuery);
-        setSearchResults(data);
+        onSearchResultsChange(data);
       } catch (err) {
         setError('Failed to fetch search results');
         console.error(err);
@@ -48,7 +52,7 @@ export function SearchPage() {
     };
 
     performSearch();
-  }, [debouncedQuery]);
+  }, [debouncedQuery, onSearchResultsChange]);
 
   const handleSearch = (newQuery: string) => {
     setQuery(newQuery);
@@ -58,11 +62,12 @@ export function SearchPage() {
   return (
     <Search 
       results={searchResults}
-      onResultsChange={setSearchResults}
+      onResultsChange={onSearchResultsChange}
       query={query}
       onQueryChange={handleSearch}
       isLoading={isLoading}
       error={error}
+      autoFocus
     />
   );
 } 

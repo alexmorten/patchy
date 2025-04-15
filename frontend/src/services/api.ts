@@ -30,6 +30,7 @@ export const getResult = async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/result/${id}`, {
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
     });
 

@@ -27,6 +27,7 @@ func NewServer(isDev bool, querier *db.Queries) *Server {
 func (s *Server) ListenAndServe() error {
 	mux := http.NewServeMux()
 	s.addSearchRoutes(mux)
+	s.addResultRoutes(mux)
 	handler := corsMiddleware(mux)
 	return http.ListenAndServe("127.0.0.1:7788", handler)
 }

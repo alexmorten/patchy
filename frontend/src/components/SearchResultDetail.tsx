@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { getResult } from '../services/api';
 import '../styles/SearchResultDetail.css';
 
 interface SearchResultData {
@@ -15,7 +16,36 @@ interface SearchResultDetailProps {
 export const SearchResultDetail = ({ results }: SearchResultDetailProps) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const result = results.find(r => r.id === id);
+  const [result, setResult] = useState<SearchResultData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchResult = async () => {
+      if (!id) return;
+
+      // First try to find the result in the search results
+      const searchResult = results.find(r => r.id === id);
+      if (searchResult) {
+        setResult(searchResult);
+        setIsLoading(false);
+        return;
+      }
+
+      // If not found in search results, fetch from the API
+      try {
+        const data = await getResult(id);
+        setResult(data);
+      } catch (err) {
+        setError('Failed to fetch result');
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchResult();
+  }, [id, results]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -28,8 +58,32 @@ export const SearchResultDetail = ({ results }: SearchResultDetailProps) => {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [navigate]);
 
-  if (!result) {
-    return null;
+  if (isLoading) {
+    return (
+      <div className="result-detail-overlay">
+        <div className="result-detail-container">
+          <div className="result-detail-loading">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !result) {
+    return (
+      <div className="result-detail-overlay">
+        <div className="result-detail-container">
+          <div className="result-detail-error">
+            {error || 'Result not found'}
+            <button 
+              className="result-detail-close"
+              onClick={() => navigate(-1)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
