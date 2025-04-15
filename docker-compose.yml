@@ -1,16 +1,19 @@
 services:
-  db:
-    image: postgres:17.2-alpine
-    command: postgres -c 'max_connections=200'
-    restart: always
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    ports:
-      - '5432:5432'
   meilisearch:
     image: getmeili/meilisearch:v1.12
     ports:
       - "7700:7700"
     environment:
       MEILI_NO_ANALYTICS: "true"
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432" 
+    environment:
+      # POSTGRES_DB specifies the name of the default database that will be created when the container first starts
+      POSTGRES_DB: patchy
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
