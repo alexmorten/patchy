@@ -17,7 +17,7 @@ function App() {
     <Router>
       <div className="app">
         <header className="app-header">
-          <h1>Patchy</h1>
+          <h1>Patchy Search</h1>
         </header>
         <main className="app-main">
           <Routes>
