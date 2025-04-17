@@ -9,8 +9,12 @@ LIMIT $1 OFFSET $2;
 
 -- name: CreateDocument :one
 INSERT INTO docs (
-  text, url
+  text, url, message_id
 ) VALUES (
-  $1, $2
+  $1, $2, $3
 )
+ON CONFLICT (message_id) 
+DO UPDATE SET
+  text = EXCLUDED.text,
+  url = EXCLUDED.url
 RETURNING *;

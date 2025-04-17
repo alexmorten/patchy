@@ -5,7 +5,8 @@
 package db
 
 type Doc struct {
-	ID   int64
-	Text string
-	Url  string
+	ID        int64
+	Text      string
+	Url       string
+	MessageID string
 }

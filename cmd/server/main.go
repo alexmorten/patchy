@@ -6,7 +6,7 @@ import (
 
 	"github.com/alexmorten/patchy/db"
 	"github.com/alexmorten/patchy/server"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // func main() {
@@ -29,12 +29,22 @@ import (
 // }
 
 func main() {
-	conn, err := pgx.Connect(context.Background(), "postgresql://localhost:5432/patchy")
+	config, err := pgxpool.ParseConfig("postgresql://localhost:5432/patchy")
 	if err != nil {
 		panic(err)
 	}
 
-	querier := db.New(conn)
+	// Set reasonable pool size limits
+	config.MaxConns = 10
+	config.MinConns = 2
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		panic(err)
+	}
+	defer pool.Close()
+
+	querier := db.New(pool)
 	s := server.NewServer(true, querier)
 	fmt.Println(s.ListenAndServe())
 }

@@ -1,0 +1,25 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+## Backend
+- go server using sqlc to access the database
+- meilisearch is used as a search backend
+
+
+
+## Frontend 
+
+- uses react and typescript
+- styling is done with css modules
+- styling should be dark themed, modern, sleek, monospaced, coding related
+
+
+
+
+
+

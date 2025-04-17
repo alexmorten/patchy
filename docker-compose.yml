@@ -5,3 +5,16 @@ services:
       - "7700:7700"
     environment:
       MEILI_NO_ANALYTICS: "true"
+  postgres:
+    image: postgres:17
+    ports:
+      - "5432:5432" 
+    environment:
+      # POSTGRES_DB specifies the name of the default database that will be created when the container first starts
+      POSTGRES_DB: patchy
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

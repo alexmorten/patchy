@@ -11,39 +11,54 @@ import (
 
 const createDocument = `-- name: CreateDocument :one
 INSERT INTO docs (
-  text, url
+  text, url, message_id
 ) VALUES (
-  $1, $2
+  $1, $2, $3
 )
-RETURNING id, text, url
+ON CONFLICT (message_id) 
+DO UPDATE SET
+  text = EXCLUDED.text,
+  url = EXCLUDED.url
+RETURNING id, text, url, message_id
 `
 
 type CreateDocumentParams struct {
-	Text string
-	Url  string
+	Text      string
+	Url       string
+	MessageID string
 }
 
 func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) (Doc, error) {
-	row := q.db.QueryRow(ctx, createDocument, arg.Text, arg.Url)
+	row := q.db.QueryRow(ctx, createDocument, arg.Text, arg.Url, arg.MessageID)
 	var i Doc
-	err := row.Scan(&i.ID, &i.Text, &i.Url)
+	err := row.Scan(
+		&i.ID,
+		&i.Text,
+		&i.Url,
+		&i.MessageID,
+	)
 	return i, err
 }
 
 const getDocumentByID = `-- name: GetDocumentByID :one
-SELECT id, text, url FROM docs
+SELECT id, text, url, message_id FROM docs
 WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetDocumentByID(ctx context.Context, id int64) (Doc, error) {
 	row := q.db.QueryRow(ctx, getDocumentByID, id)
 	var i Doc
-	err := row.Scan(&i.ID, &i.Text, &i.Url)
+	err := row.Scan(
+		&i.ID,
+		&i.Text,
+		&i.Url,
+		&i.MessageID,
+	)
 	return i, err
 }
 
 const listDocuments = `-- name: ListDocuments :many
-SELECT id, text, url FROM docs
+SELECT id, text, url, message_id FROM docs
 ORDER BY id
 LIMIT $1 OFFSET $2
 `
@@ -62,7 +77,12 @@ func (q *Queries) ListDocuments(ctx context.Context, arg ListDocumentsParams) ([
 	var items []Doc
 	for rows.Next() {
 		var i Doc
-		if err := rows.Scan(&i.ID, &i.Text, &i.Url); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.Url,
+			&i.MessageID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
