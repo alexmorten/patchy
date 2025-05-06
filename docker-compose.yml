@@ -15,6 +15,28 @@ services:
       POSTGRES_HOST_AUTH_METHOD: "trust"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "7788:7788"
+      - "80:80"
+      - "443:443"
+    environment:
+      POSTGRES_CONNECTION_STRING: "postgresql://postgres@postgres:5432/patchy"
+      MEILISEARCH_URL: "http://meilisearch:7700"
+      ENVIRONMENT: "production"
+      HOST: "0.0.0.0"
+      PORT: "7788"
+      CERT_CACHE_DIR: "/app/certs"  # Certificate cache directory
+    volumes:
+      - certs_data:/app/certs
+    depends_on:
+      - postgres
+      - meilisearch
 
 volumes:
   postgres_data:
+  certs_data:

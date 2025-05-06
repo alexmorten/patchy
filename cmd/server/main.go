@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"os"
 
 	"github.com/alexmorten/patchy/db"
 	"github.com/alexmorten/patchy/server"
@@ -29,7 +31,28 @@ import (
 // }
 
 func main() {
-	config, err := pgxpool.ParseConfig("postgresql://localhost:5432/patchy")
+	// Parse command line flags
+	domain := flag.String("domain", "", "Domain name for HTTPS with Let's Encrypt (e.g., example.com)")
+	flag.Parse()
+
+	// Also check environment variable if flag is not provided
+	if *domain == "" {
+		*domain = os.Getenv("DOMAIN")
+	}
+
+	if *domain != "" {
+		fmt.Printf("Starting server with autocert for domain: %s\n", *domain)
+	} else {
+		fmt.Println("Starting server in HTTP mode (no domain provided)")
+	}
+
+	// Get database connection string from environment variable or use default
+	connString := os.Getenv("POSTGRES_CONNECTION_STRING")
+	if connString == "" {
+		connString = "postgresql://localhost:5432/patchy"
+	}
+
+	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
 		panic(err)
 	}
@@ -45,6 +68,6 @@ func main() {
 	defer pool.Close()
 
 	querier := db.New(pool)
-	s := server.NewServer(true, querier)
+	s := server.NewServer(*domain, querier)
 	fmt.Println(s.ListenAndServe())
 }
