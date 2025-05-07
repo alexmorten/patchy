@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getResult } from '../services/api';
 import '../styles/SearchResultDetail.css';
 
@@ -20,32 +20,47 @@ export const SearchResultDetail = ({ results }: SearchResultDetailProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchResult = async () => {
-      if (!id) return;
-
-      // First try to find the result in the search results
-      const searchResult = results.find(r => r.id === id);
-      if (searchResult) {
-        setResult(searchResult);
-        setIsLoading(false);
-        return;
-      }
-
-      // If not found in search results, fetch from the API
-      try {
-        const data = await getResult(id);
-        setResult(data);
-      } catch (err) {
-        setError('Failed to fetch result');
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchResult();
+  // Use refs to track previous values and avoid unnecessary fetches
+  const prevIdRef = useRef(id);
+  const prevResultsRef = useRef(results);
+  
+  const fetchResult = useCallback(async () => {
+    if (!id) return;
+    
+    // First try to find the result in the search results
+    const searchResult = results.find(r => r.id === id);
+    if (searchResult) {
+      setResult(searchResult);
+      setIsLoading(false);
+      return;
+    }
+    
+    // If not found in search results, fetch from the API
+    try {
+      const data = await getResult(id);
+      setResult(data);
+    } catch (err) {
+      setError('Failed to fetch result');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   }, [id, results]);
+
+  useEffect(() => {
+    // Only fetch if id or results changed meaningfully
+    const idChanged = id !== prevIdRef.current;
+    const resultsChanged = results !== prevResultsRef.current;
+    
+    if (idChanged || resultsChanged) {
+      setIsLoading(true);
+      fetchResult();
+      
+      // Update refs with current values
+      prevIdRef.current = id;
+      prevResultsRef.current = results;
+    }
+  }, [id, results, fetchResult]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -101,6 +116,8 @@ export const SearchResultDetail = ({ results }: SearchResultDetailProps) => {
         <div 
           className="result-detail-content"
           dangerouslySetInnerHTML={{ __html: result.text }}
+          /* Prevent reflow by using a key */
+          key={result.id}
         />
       </div>
     </div>
