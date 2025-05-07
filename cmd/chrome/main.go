@@ -27,6 +27,17 @@ type NetworkEvent struct {
 }
 
 func main() {
+	// Start Xvfb
+	display := ":99"
+	cmd := exec.Command("Xvfb", display, "-screen", "0", "1920x1080x24")
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("Error starting Xvfb: %v", err)
+	}
+	defer cmd.Process.Kill()
+
+	// Set DISPLAY environment variable
+	os.Setenv("DISPLAY", display)
+
 	// Kill any existing Chrome processes
 	exec.Command("pkill", "-f", "chrome").Run()
 	exec.Command("pkill", "-f", "chromedriver").Run()
@@ -99,7 +110,6 @@ func main() {
 			"--enable-network-information",
 			"--log-level=0",
 			"--enable-features=NetworkService,NetworkServiceInProcess",
-			"--headless=new",
 			"--user-data-dir=" + chromeDir,
 			"--remote-debugging-port=9222",
 		},
