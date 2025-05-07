@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -26,6 +27,17 @@ type NetworkEvent struct {
 }
 
 func main() {
+	// Kill any existing Chrome processes
+	exec.Command("pkill", "-f", "chrome").Run()
+	exec.Command("pkill", "-f", "chromedriver").Run()
+
+	// Create a unique temporary directory for Chrome
+	chromeDir, err := ioutil.TempDir("", "chrome-*")
+	if err != nil {
+		log.Fatalf("Error creating temp directory: %v", err)
+	}
+	defer os.RemoveAll(chromeDir)
+
 	// Set up Selenium WebDriver
 	const (
 		seleniumPath    = "chromedriver" // Make sure chromedriver is in your PATH
@@ -88,7 +100,7 @@ func main() {
 			"--log-level=0",
 			"--enable-features=NetworkService,NetworkServiceInProcess",
 			"--headless=new",
-			"--user-data-dir=/tmp/chrome-headless",
+			"--user-data-dir=" + chromeDir,
 			"--remote-debugging-port=9222",
 		},
 		ExcludeSwitches: []string{"enable-automation"},
