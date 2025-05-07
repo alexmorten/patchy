@@ -30,14 +30,14 @@
 .search-input:focus {
   border-color: var(--accent-color);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.2);
+  box-shadow: 0 0 0 3px rgba(179, 136, 255, 0.2);
 }
 
 .search-button {
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
-  background: linear-gradient(135deg, var(--accent-color) 0%, #0066b3 100%);
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--accent-color) 0%, #7c4dff 100%);
+  color: #000000;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -46,7 +46,7 @@
 }
 
 .search-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #0066b3 0%, #005a99 100%);
+  background: linear-gradient(135deg, #7c4dff 0%, #651fff 100%);
   transform: translateY(-1px);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
@@ -143,6 +143,6 @@
 }
 
 .expand-button:hover {
-  background-color: #00cc00;
+  background-color: #7c4dff;
   color: #000000;
 } 

@@ -15,13 +15,19 @@ import (
 const messageBeginning = "From mboxrd@z"
 
 func main() {
+	filename := "archive.utf8.txt"
+
+	if len(os.Args) > 1 {
+		filename = os.Args[1]
+	}
+
 	conn, err := pgx.Connect(context.Background(), "postgresql://localhost:5432/patchy")
 	if err != nil {
 		panic(err)
 	}
 	querier := db.New(conn)
 
-	f, err := os.Open("archive.utf8.txt")
+	f, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}
