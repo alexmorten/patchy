@@ -32,7 +32,7 @@ func (s *Server) jsonResultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the document from the database
-	doc, err := s.querier.GetDocumentByID(r.Context(), int64(idInt))
+	doc, err := s.config.Querier.GetDocumentByID(r.Context(), int64(idInt))
 	if err != nil {
 		http.Error(w, "Document not found", http.StatusNotFound)
 		return

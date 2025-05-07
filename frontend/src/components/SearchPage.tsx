@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { Search } from './Search';
@@ -18,56 +18,56 @@ interface SearchPageProps {
 
 export function SearchPage({ searchResults, onSearchResultsChange }: SearchPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialQuery = searchParams.get('q') || '';
+  const initialQuery = useMemo(() => searchParams.get('q') || '', [searchParams]);
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery] = useDebounce(query, 200);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debouncedSetSearchParams] = useDebounce((newQuery: string) => {
+  
+  const updateSearchParams = useCallback((newQuery: string) => {
     const params = new URLSearchParams();
     if (newQuery) {
       params.set('q', newQuery);
     }
     setSearchParams(params);
-  }, 300);
+  }, [setSearchParams]);
+  
+  const [debouncedSetSearchParams] = useDebounce(updateSearchParams, 300);
+
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 3) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await search(query);
+      onSearchResultsChange(data);
+    } catch (err) {
+      setError('Failed to fetch search results');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onSearchResultsChange]);
 
   useEffect(() => {
-    const performSearch = async () => {
-      if (!debouncedQuery.trim() || debouncedQuery.trim().length < 3) {
-        return;
-      }
+    performSearch(debouncedQuery);
+  }, [debouncedQuery, performSearch]);
 
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const data = await search(debouncedQuery);
-        onSearchResultsChange(data);
-      } catch (err) {
-        setError('Failed to fetch search results');
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    performSearch();
-  }, [debouncedQuery, onSearchResultsChange]);
-
-  const handleSearch = (newQuery: string) => {
+  const handleSearch = useCallback((newQuery: string) => {
     setQuery(newQuery);
     debouncedSetSearchParams(newQuery);
-  };
+  }, [debouncedSetSearchParams]);
 
-  return (
-    <Search 
-      results={searchResults}
-      onResultsChange={onSearchResultsChange}
-      query={query}
-      onQueryChange={handleSearch}
-      isLoading={isLoading}
-      error={error}
-      autoFocus
-    />
-  );
+  return <Search 
+    results={searchResults}
+    query={query}
+    onQueryChange={handleSearch}
+    isLoading={isLoading}
+    error={error}
+    autoFocus={true}
+  />;
 } 

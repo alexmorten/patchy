@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { SearchPage } from './components/SearchPage';
 import { SearchResultDetail } from './components/SearchResultDetail';
 import './styles/App.css';
@@ -12,6 +12,9 @@ interface SearchResultData {
 
 function App() {
   const [searchResults, setSearchResults] = useState<SearchResultData[]>([]);
+  const handleSearchResultsChange = useCallback((results: SearchResultData[]) => {
+    setSearchResults(results);
+  }, []);
 
   return (
     <Router>
@@ -26,7 +29,7 @@ function App() {
               element={
                 <SearchPage 
                   searchResults={searchResults}
-                  onSearchResultsChange={setSearchResults}
+                  onSearchResultsChange={handleSearchResultsChange}
                 />
               }
             />

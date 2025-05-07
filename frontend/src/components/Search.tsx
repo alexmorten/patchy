@@ -1,4 +1,3 @@
-import { search } from '../services/api';
 import { SearchResult } from './SearchResult';
 import '../styles/Search.css';
 
@@ -10,7 +9,6 @@ interface SearchResultData {
 
 interface SearchProps {
   results: SearchResultData[];
-  onResultsChange: (results: SearchResultData[]) => void;
   query: string;
   onQueryChange: (query: string) => void;
   isLoading: boolean;
@@ -18,36 +16,23 @@ interface SearchProps {
   autoFocus?: boolean;
 }
 
-const highlightText = (text: string, query: string) => {
-  if (!query) return text;
-  const regex = new RegExp(`(${query})`, 'gi');
-  return text.replace(regex, '<mark>$1</mark>');
-};
-
 export const Search = ({ 
   results, 
-  onResultsChange, 
   query, 
   onQueryChange,
   isLoading,
   error,
   autoFocus = false
 }: SearchProps) => {
-  const handleSearch = async (e: React.FormEvent) => {
+  const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-
-    try {
-      const data = await search(query);
-      onResultsChange(data);
-    } catch (err) {
-      console.error(err);
-    }
+    // Don't make a separate API call from the form submit
+    // The parent SearchPage component is already handling API calls via useEffect
   };
 
   return (
     <div className="search-container">
-      <form onSubmit={handleSearch} className="search-form">
+      <form onSubmit={onSubmit} className="search-form">
         <input
           type="text"
           value={query}
@@ -65,11 +50,11 @@ export const Search = ({
 
       <div className="results-container">
         {results.map((result) => (
-          <SearchResult
-            key={result.id}
-            id={result.id}
-            text={highlightText(result.text, query)}
-          />
+            <SearchResult
+              key={result.id}
+              id={result.id}
+              text={result.text}
+            />
         ))}
       </div>
     </div>

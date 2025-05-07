@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface SearchResultProps {
@@ -6,17 +6,19 @@ interface SearchResultProps {
   text: string;
 }
 
-export const SearchResult = ({ id, text }: SearchResultProps) => {
+export const SearchResult = memo(({ id, text }: SearchResultProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-
+  
   useEffect(() => {
+    // Only update content height when the component mounts
+    // or when isExpanded changes
     if (contentRef.current) {
       setContentHeight(contentRef.current.scrollHeight);
     }
-  }, [text]);
+  }, [isExpanded]);
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded);
@@ -46,4 +48,4 @@ export const SearchResult = ({ id, text }: SearchResultProps) => {
       </button>
     </div>
   );
-}; 
+});
