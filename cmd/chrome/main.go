@@ -80,13 +80,16 @@ func main() {
 			"--disable-popup-blocking",
 			"--disable-infobars",
 			"--ignore-certificate-errors",
-			"--enable-gpu", // Enable GPU acceleration
+			"--enable-gpu",
 			"--window-size=1920,1080",
 			"--enable-logging",
 			"--v=1",
 			"--enable-network-information",
 			"--log-level=0",
 			"--enable-features=NetworkService,NetworkServiceInProcess",
+			"--headless=new",
+			"--user-data-dir=/tmp/chrome-headless",
+			"--remote-debugging-port=9222",
 		},
 		ExcludeSwitches: []string{"enable-automation"},
 		// Enable performance logging
