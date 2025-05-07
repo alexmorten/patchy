@@ -1,445 +1,598 @@
 package main
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"math/rand"
-	"net/http"
-	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/chromedp/cdproto/emulation"
-	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	"github.com/tebeka/selenium"
+	"github.com/tebeka/selenium/chrome"
 )
 
+// NetworkEvent represents a simplified network request/response
+type NetworkEvent struct {
+	Type        string            `json:"type"`
+	Method      string            `json:"method"`
+	URL         string            `json:"url"`
+	StatusCode  int               `json:"statusCode,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Timestamp   time.Time         `json:"timestamp"`
+	ElapsedTime int64             `json:"elapsedTime,omitempty"`
+}
+
 func main() {
-	// Seed random number generator
-	rand.Seed(time.Now().UnixNano())
-
-	// Create context with custom options to appear more like a real browser
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		// Set a realistic user agent - using Firefox instead of Chrome
-		chromedp.UserAgent("Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0"),
-		// Disable automation flags
-		chromedp.Flag("disable-blink-features", "AutomationControlled"),
-		chromedp.Flag("disable-features", "AutomationControlled"),
-		chromedp.Flag("enable-automation", false),
-		// Additional flags to make the browser appear more normal
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-web-security", true),
-		// Set window size to a common resolution
-		chromedp.WindowSize(1366, 768),
-		// Enable images and JavaScript
-		chromedp.Flag("disable-images", false),
-		chromedp.Flag("disable-javascript", false),
-		// Add plugins and extensions flags
-		chromedp.Flag("enable-plugins", true),
-		// Set language preferences
-		chromedp.Flag("lang", "en-US,en;q=0.9"),
-		// Add hardware concurrency
-		chromedp.Flag("js-flags", "--expose_gc"),
-		// Add WebGL support
-		chromedp.Flag("enable-webgl", true),
-		// Add WebRTC support
-		chromedp.Flag("enable-webrtc", true),
+	// Set up Selenium WebDriver
+	const (
+		seleniumPath    = "chromedriver" // Make sure chromedriver is in your PATH
+		port            = 4444
+		geckoDriverPath = "geckodriver" // Make sure geckodriver is in your PATH if using Firefox
 	)
-	
-	ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer cancel()
 
-	ctx, cancel = chromedp.NewContext(
-		ctx,
-		chromedp.WithLogf(log.Printf),
-	)
-	defer cancel()
+	// Create a directory to store network logs
+	logDir := "network_logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Fatalf("Error creating log directory: %v", err)
+	}
 
-	// Set a longer timeout for the entire context
-	ctx, cancel = context.WithTimeout(ctx, 180*time.Second)
-	defer cancel()
+	opts := []selenium.ServiceOption{}
+	service, err := selenium.NewChromeDriverService(seleniumPath, port, opts...)
+	if err != nil {
+		fmt.Printf("Error starting Chrome driver: %v\n", err)
 
-	// Store challenge-related transactions and response headers
-	var challengeRequests []string
-	var challengeResponses []string
-	var responseHeaders []string
-
-	// Track if we've seen the pass-challenge request
-	passChallengeRequested := false
-	passChallengeResponded := false
-	challengeURL := ""
-	var challengeParams url.Values
-
-	// Listen for network events
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *network.EventRequestWillBeSent:
-			fmt.Printf("Request: %s %s\n", e.Request.Method, e.Request.URL)
-			
-			if strings.Contains(e.Request.URL, "pass-challenge") {
-				passChallengeRequested = true
-				challengeURL = e.Request.URL
-				challengeRequests = append(challengeRequests,
-					fmt.Sprintf("Challenge Request: %s %s", e.Request.Method, e.Request.URL))
-				
-				// Parse the challenge URL to extract parameters
-				if parsedURL, err := url.Parse(e.Request.URL); err == nil {
-					challengeParams = parsedURL.Query()
-					fmt.Println("\n=== Challenge Parameters ===")
-					for k, v := range challengeParams {
-						fmt.Printf("%s: %s\n", k, v[0])
-					}
-				}
-				
-				fmt.Println("\n=== Pass-Challenge Request Details ===")
-				fmt.Printf("URL: %s\n", e.Request.URL)
-				fmt.Printf("Method: %s\n", e.Request.Method)
-				fmt.Println("Headers:")
-				for name, value := range e.Request.Headers {
-					fmt.Printf("%s: %v\n", name, value)
-				}
-			} else if strings.Contains(e.Request.URL, "make-challenge") {
-				challengeRequests = append(challengeRequests,
-					fmt.Sprintf("Make Challenge Request: %s %s", e.Request.Method, e.Request.URL))
-			}
-			
-		case *network.EventResponseReceived:
-			fmt.Printf("Response: %s (Status: %d)\n", e.Response.URL, int(e.Response.Status))
-			
-			if strings.Contains(e.Response.URL, "pass-challenge") {
-				passChallengeResponded = true
-				challengeResponses = append(challengeResponses,
-					fmt.Sprintf("Pass-Challenge Response: %d %s", int(e.Response.Status), e.Response.URL))
-				
-				fmt.Println("\n=== Pass-Challenge Response Details ===")
-				fmt.Printf("URL: %s\n", e.Response.URL)
-				fmt.Printf("Status: %d\n", int(e.Response.Status))
-				fmt.Println("Headers:")
-				for name, value := range e.Response.Headers {
-					headerStr := fmt.Sprintf("%s: %v", name, value)
-					responseHeaders = append(responseHeaders, headerStr)
-					fmt.Println(headerStr)
-				}
-			} else if strings.Contains(e.Response.URL, "make-challenge") {
-				challengeResponses = append(challengeResponses,
-					fmt.Sprintf("Make-Challenge Response: %d %s", int(e.Response.Status), e.Response.URL))
-				
-				fmt.Println("\n=== Make-Challenge Response Headers ===")
-				for name, value := range e.Response.Headers {
-					headerStr := fmt.Sprintf("%s: %v", name, value)
-					responseHeaders = append(responseHeaders, headerStr)
-					fmt.Println(headerStr)
-				}
-			}
-			
-		case *network.EventLoadingFinished:
-			fmt.Printf("Request completed: %s\n", e.RequestID)
+		// Try Firefox as a fallback
+		service, err = selenium.NewGeckoDriverService(geckoDriverPath, port, opts...)
+		if err != nil {
+			log.Fatalf("Error starting Firefox driver: %v", err)
 		}
+	}
+	defer service.Stop()
+
+	// Connect to the WebDriver instance
+	caps := selenium.Capabilities{
+		"browserName": "chrome",
+	}
+
+	// Enable Chrome DevTools Protocol (CDP) logging
+	loggingPrefs := map[string]string{
+		"browser":     "ALL",
+		"driver":      "ALL",
+		"performance": "ALL",
+	}
+	caps["loggingPrefs"] = loggingPrefs
+
+	networkEnabled := true
+	pageEnabled := true
+	timelineEnabled := true
+
+	// Set Chrome-specific options
+	chromeCaps := chrome.Capabilities{
+		Args: []string{
+			"--no-sandbox",
+			"--disable-dev-shm-usage",
+			"--disable-blink-features=AutomationControlled",
+			"--start-maximized",
+			"--disable-extensions",
+			"--disable-popup-blocking",
+			"--disable-infobars",
+			"--ignore-certificate-errors",
+			"--enable-gpu", // Enable GPU acceleration
+			"--window-size=1920,1080",
+			"--enable-logging",
+			"--v=1",
+			"--enable-network-information",
+			"--log-level=0",
+			"--enable-features=NetworkService,NetworkServiceInProcess",
+		},
+		ExcludeSwitches: []string{"enable-automation"},
+		// Enable performance logging
+		PerfLoggingPrefs: &chrome.PerfLoggingPreferences{
+			EnableNetwork:   &networkEnabled,
+			EnablePage:      &pageEnabled,
+			EnableTimeline:  &timelineEnabled,
+			TraceCategories: "devtools.timeline,loading",
+		},
+	}
+
+	caps.AddChrome(chromeCaps)
+
+	// Set user preferences
+	prefs := map[string]interface{}{
+		"profile.default_content_settings.popups":   0,
+		"credentials_enable_service":                false,
+		"profile.password_manager_enabled":          false,
+		"devtools.preferences.network.log.preserve": true,
+	}
+	caps.AddChrome(chrome.Capabilities{
+		Prefs: prefs,
 	})
 
-	// Override JavaScript properties that might reveal automation
-	err := chromedp.Run(ctx, 
-		// Enable network monitoring
-		network.Enable(),
+	// Connect to WebDriver
+	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
+	if err != nil {
+		log.Fatalf("Error connecting to WebDriver: %v", err)
+	}
+	defer wd.Quit()
+
+	// Set window size
+	if err := wd.ResizeWindow("", 1920, 1080); err != nil {
+		log.Printf("Error resizing window: %v", err)
+	}
+
+	// Execute JavaScript to enable network monitoring
+	script := `
+		// Create a global array to store network events
+		window.networkEvents = [];
 		
-		// Set custom headers to mimic a real browser
-		network.SetExtraHTTPHeaders(network.Headers{
-			"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-			"accept-language":           "en-US,en;q=0.5",
-			"accept-encoding":           "gzip, deflate, br",
-			"connection":                "keep-alive",
-			"upgrade-insecure-requests": "1",
-			"sec-fetch-dest":            "document",
-			"sec-fetch-mode":            "navigate",
-			"sec-fetch-site":            "none",
-			"sec-fetch-user":            "?1",
-			"dnt":                       "1",
-		}),
+		// Create a PerformanceObserver to monitor network requests
+		const observer = new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				if (entry.entryType === 'resource') {
+					window.networkEvents.push({
+						type: 'request',
+						url: entry.name,
+						initiatorType: entry.initiatorType,
+						startTime: entry.startTime,
+						duration: entry.duration,
+						timestamp: new Date().toISOString()
+					});
+				}
+			}
+		});
 		
-		// Override JavaScript properties that might reveal automation
-		chromedp.Evaluate(`
-			// Override navigator properties
-			Object.defineProperty(navigator, 'webdriver', {
-				get: () => false,
+		// Start observing
+		observer.observe({entryTypes: ['resource']});
+		
+		// Override fetch to monitor network requests
+		const originalFetch = window.fetch;
+		window.fetch = async function(input, init) {
+			const url = typeof input === 'string' ? input : input.url;
+			const method = init?.method || 'GET';
+			
+			// Log the request
+			const requestEvent = {
+				type: 'fetch-request',
+				method: method,
+				url: url,
+				headers: init?.headers || {},
+				timestamp: new Date().toISOString()
+			};
+			window.networkEvents.push(requestEvent);
+			
+			try {
+				// Make the actual request
+				const response = await originalFetch.apply(this, arguments);
+				
+				// Clone the response to avoid consuming it
+				const clonedResponse = response.clone();
+				
+				// Log the response
+				const responseEvent = {
+					type: 'fetch-response',
+					url: url,
+					status: clonedResponse.status,
+					statusText: clonedResponse.statusText,
+					headers: Object.fromEntries([...clonedResponse.headers.entries()]),
+					timestamp: new Date().toISOString()
+				};
+				window.networkEvents.push(responseEvent);
+				
+				return response;
+			} catch (error) {
+				// Log the error
+				const errorEvent = {
+					type: 'fetch-error',
+					url: url,
+					error: error.toString(),
+					timestamp: new Date().toISOString()
+				};
+				window.networkEvents.push(errorEvent);
+				
+				throw error;
+			}
+		};
+		
+		// Override XMLHttpRequest to monitor AJAX requests
+		const originalXHROpen = XMLHttpRequest.prototype.open;
+		const originalXHRSend = XMLHttpRequest.prototype.send;
+		
+		XMLHttpRequest.prototype.open = function(method, url) {
+			this._method = method;
+			this._url = url;
+			return originalXHROpen.apply(this, arguments);
+		};
+		
+		XMLHttpRequest.prototype.send = function() {
+			// Log the request
+			const requestEvent = {
+				type: 'xhr-request',
+				method: this._method,
+				url: this._url,
+				timestamp: new Date().toISOString()
+			};
+			window.networkEvents.push(requestEvent);
+			
+			// Add response listener
+			this.addEventListener('load', function() {
+				const responseEvent = {
+					type: 'xhr-response',
+					url: this._url,
+					status: this.status,
+					statusText: this.statusText,
+					headers: this.getAllResponseHeaders().split('\r\n').reduce((acc, header) => {
+						const parts = header.split(': ');
+						if (parts.length === 2) {
+							acc[parts[0]] = parts[1];
+						}
+						return acc;
+					}, {}),
+					timestamp: new Date().toISOString()
+				};
+				window.networkEvents.push(responseEvent);
 			});
 			
-			// Override permissions
+			this.addEventListener('error', function() {
+				const errorEvent = {
+					type: 'xhr-error',
+					url: this._url,
+					timestamp: new Date().toISOString()
+				};
+				window.networkEvents.push(errorEvent);
+			});
+			
+			return originalXHRSend.apply(this, arguments);
+		};
+		
+		// Function to retrieve all network events
+		window.getNetworkEvents = function() {
+			return window.networkEvents;
+		};
+	`
+	_, err = wd.ExecuteScript(script, nil)
+	if err != nil {
+		log.Printf("Error executing network monitoring script: %v", err)
+	}
+
+	// Execute JavaScript to hide automation
+	antiDetectionScript := `
+		Object.defineProperty(navigator, 'webdriver', {
+			get: () => false,
+		});
+		
+		// Override permissions
+		if (window.navigator.permissions) {
 			const originalQuery = window.navigator.permissions.query;
 			window.navigator.permissions.query = (parameters) => (
 				parameters.name === 'notifications' ?
 					Promise.resolve({ state: Notification.permission }) :
 					originalQuery(parameters)
 			);
-			
-			// Add plugins
-			Object.defineProperty(navigator, 'plugins', {
-				get: () => {
-					return [
-						{
-							0: {type: "application/pdf", suffixes: "pdf", description: "Portable Document Format"},
-							name: "PDF Viewer",
-							description: "Portable Document Format",
-							filename: "internal-pdf-viewer",
-							length: 1
-						},
-						{
-							0: {type: "application/x-shockwave-flash", suffixes: "swf", description: "Shockwave Flash"},
-							name: "Shockwave Flash",
-							description: "Shockwave Flash 32.0 r0",
-							filename: "flash.ocx",
-							length: 1
-						}
-					];
-				},
-			});
-			
-			// Add languages
-			Object.defineProperty(navigator, 'languages', {
-				get: () => ['en-US', 'en'],
-			});
-			
-			// Override toString methods to hide proxy behavior
-			const originalFunction = Function.prototype.toString;
-			Function.prototype.toString = function() {
-				if (this === Function.prototype.toString) return originalFunction.call(this);
-				if (this === navigator.permissions.query) return "function query() { [native code] }";
-				return originalFunction.call(this);
-			};
-		`, nil),
+		}
 		
 		// Set hardware concurrency
-		chromedp.Evaluate(`
-			Object.defineProperty(navigator, 'hardwareConcurrency', {
-				get: () => 4,
-			});
-		`, nil),
-		
-		// Set device memory
-		chromedp.Evaluate(`
-			Object.defineProperty(navigator, 'deviceMemory', {
-				get: () => 8,
-			});
-		`, nil),
+		Object.defineProperty(navigator, 'hardwareConcurrency', {
+			get: () => 8,
+		});
 		
 		// Set platform
-		chromedp.Evaluate(`
-			Object.defineProperty(navigator, 'platform', {
-				get: () => 'Linux x86_64',
-			});
-		`, nil),
-	)
+		Object.defineProperty(navigator, 'platform', {
+			get: () => 'Linux x86_64',
+		});
+	`
+	_, err = wd.ExecuteScript(antiDetectionScript, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error executing anti-detection script: %v", err)
 	}
 
-	// Visit the LKML archive
+	// Navigate to the target URL
 	url := "https://lore.kernel.org/lkml/"
 	fmt.Printf("Navigating to: %s\n", url)
-	
-	err = chromedp.Run(ctx,
-		// Set a realistic viewport
-		emulation.SetDeviceMetricsOverride(1366, 768, 1.0, false),
-		
-		// Navigate to the URL
-		chromedp.Navigate(url),
-		
-		// Wait for initial page load
-		chromedp.Sleep(randomDuration(3, 5)),
-		
-		// Perform random mouse movements to appear human-like
-		simulateHumanBehavior(ctx),
-	)
-	if err != nil {
-		log.Fatal(err)
+
+	if err := wd.Get(url); err != nil {
+		log.Fatalf("Error navigating to %s: %v", url, err)
 	}
 
-	// If we detected a challenge but didn't get a response, try to handle it directly
-	if passChallengeRequested && !passChallengeResponded && challengeURL != "" {
-		fmt.Printf("Attempting to handle challenge directly: %s\n", challengeURL)
-		
-		// Try to handle the challenge with a direct HTTP request
-		if len(challengeParams) > 0 {
-			// Create a direct HTTP client with similar headers
-			client := &http.Client{
-				Timeout: 30 * time.Second,
+	// Wait for page to load
+	time.Sleep(5 * time.Second)
+
+	// Simulate human-like behavior
+	simulateHumanBehavior(wd)
+
+	// Collect network events from JavaScript
+	var jsNetworkEvents []map[string]interface{}
+	if result, err := wd.ExecuteScript("return window.getNetworkEvents();", nil); err == nil {
+		if events, ok := result.([]interface{}); ok {
+			for _, event := range events {
+				if eventMap, ok := event.(map[string]interface{}); ok {
+					jsNetworkEvents = append(jsNetworkEvents, eventMap)
+				}
 			}
-			
-			req, err := http.NewRequest("GET", challengeURL, nil)
-			if err == nil {
-				// Add headers to mimic a real browser
-				req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0")
-				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-				req.Header.Set("Accept-Language", "en-US,en;q=0.5")
-				req.Header.Set("Connection", "keep-alive")
-				req.Header.Set("Upgrade-Insecure-Requests", "1")
-				req.Header.Set("Sec-Fetch-Dest", "document")
-				req.Header.Set("Sec-Fetch-Mode", "navigate")
-				req.Header.Set("Sec-Fetch-Site", "same-origin")
-				req.Header.Set("Sec-Fetch-User", "?1")
-				req.Header.Set("DNT", "1")
-				req.Header.Set("Referer", "https://lore.kernel.org/lkml/")
-				
-				// Make the request
-				resp, err := client.Do(req)
-				if err == nil {
-					defer resp.Body.Close()
-					fmt.Printf("Direct challenge request response: %d\n", resp.StatusCode)
-					
-					// If successful, navigate to the target URL
-					if resp.StatusCode == 200 || resp.StatusCode == 302 {
-						err = chromedp.Run(ctx,
-							chromedp.Navigate(url),
-							chromedp.Sleep(randomDuration(3, 5)),
-						)
-						if err != nil {
-							fmt.Printf("Error navigating after challenge: %v\n", err)
+		}
+	} else {
+		log.Printf("Error getting network events from JavaScript: %v", err)
+	}
+
+	// Print JavaScript-captured network events
+	fmt.Println("\n=== JavaScript Network Events ===")
+	for i, event := range jsNetworkEvents {
+		eventType := event["type"]
+		urlValue := event["url"]
+		timestamp := event["timestamp"]
+
+		fmt.Printf("%d. [%s] %s - %s\n", i+1, timestamp, eventType, urlValue)
+
+		// Print more details for certain events
+		if eventType == "fetch-response" || eventType == "xhr-response" {
+			status := event["status"]
+			fmt.Printf("   Status: %v\n", status)
+
+			if headers, ok := event["headers"].(map[string]interface{}); ok && len(headers) > 0 {
+				fmt.Println("   Headers:")
+				for k, v := range headers {
+					fmt.Printf("     %s: %v\n", k, v)
+				}
+			}
+		}
+
+		// Look for challenge-related events
+		if urlStr, ok := urlValue.(string); ok {
+			if strings.Contains(urlStr, "challenge") {
+				fmt.Printf("\n!!! CHALLENGE EVENT DETECTED !!!\n")
+				fmt.Printf("Event Type: %s\n", eventType)
+				fmt.Printf("URL: %s\n", urlStr)
+
+				// Print all event details
+				eventJSON, _ := json.MarshalIndent(event, "", "  ")
+				fmt.Println(string(eventJSON))
+				fmt.Println()
+			}
+		}
+	}
+
+	// Get browser logs
+	logs, err := wd.Log("performance")
+	if err != nil {
+		log.Printf("Error getting performance logs: %v", err)
+	} else {
+		fmt.Printf("\n=== Browser Performance Logs (%d entries) ===\n", len(logs))
+
+		// Process performance logs to extract network events
+		for i, entry := range logs {
+			var logEntry map[string]interface{}
+			if err := json.Unmarshal([]byte(entry.Message), &logEntry); err != nil {
+				continue
+			}
+
+			if message, ok := logEntry["message"].(map[string]interface{}); ok {
+				if method, ok := message["method"].(string); ok {
+					// Filter for network events
+					if strings.HasPrefix(method, "Network.") {
+						fmt.Printf("%d. %s\n", i+1, method)
+
+						// Extract request/response details
+						if params, ok := message["params"].(map[string]interface{}); ok {
+							// Check for request details
+							if request, ok := params["request"].(map[string]interface{}); ok {
+								if reqURL, ok := request["url"].(string); ok {
+									fmt.Printf("   URL: %s\n", reqURL)
+
+									// Check if this is a challenge-related request
+									if strings.Contains(reqURL, "challenge") {
+										fmt.Printf("\n!!! CHALLENGE REQUEST DETECTED !!!\n")
+										fmt.Printf("Method: %s\n", method)
+										fmt.Printf("URL: %s\n", reqURL)
+
+										// Print request details
+										if reqMethod, ok := request["method"].(string); ok {
+											fmt.Printf("HTTP Method: %s\n", reqMethod)
+										}
+
+										// Print headers
+										if headers, ok := request["headers"].(map[string]interface{}); ok {
+											fmt.Println("Headers:")
+											for k, v := range headers {
+												fmt.Printf("  %s: %v\n", k, v)
+											}
+										}
+
+										// Save full details to a file
+										detailsJSON, _ := json.MarshalIndent(message, "", "  ")
+										filename := filepath.Join(logDir, fmt.Sprintf("challenge_request_%d.json", i))
+										if err := ioutil.WriteFile(filename, detailsJSON, 0644); err != nil {
+											log.Printf("Error saving challenge details: %v", err)
+										} else {
+											fmt.Printf("Full details saved to: %s\n", filename)
+										}
+
+										fmt.Println()
+									}
+								}
+							}
+
+							// Check for response details
+							if response, ok := params["response"].(map[string]interface{}); ok {
+								if respURL, ok := response["url"].(string); ok {
+									fmt.Printf("   Response URL: %s\n", respURL)
+
+									if statusCode, ok := response["status"].(float64); ok {
+										fmt.Printf("   Status: %.0f\n", statusCode)
+									}
+
+									// Check if this is a challenge-related response
+									if strings.Contains(respURL, "challenge") {
+										fmt.Printf("\n!!! CHALLENGE RESPONSE DETECTED !!!\n")
+										fmt.Printf("Method: %s\n", method)
+										fmt.Printf("URL: %s\n", respURL)
+										fmt.Println(response)
+
+										// Print status
+										if statusCode, ok := response["status"].(float64); ok {
+											fmt.Printf("Status Code: %.0f\n", statusCode)
+										}
+
+										// Print headers with special focus on Set-Cookie
+										if headers, ok := response["headers"].(map[string]interface{}); ok {
+											fmt.Println("Headers:")
+
+											// First check specifically for Set-Cookie header
+											if setCookie, ok := headers["Set-Cookie"]; ok {
+												fmt.Printf("  >>> Set-Cookie: %v <<<\n", setCookie)
+											} else if setCookie, ok := headers["set-cookie"]; ok {
+												fmt.Printf("  >>> Set-Cookie: %v <<<\n", setCookie)
+											}
+
+											// Then print all headers
+											for k, v := range headers {
+												fmt.Printf("  %s: %v\n", k, v)
+											}
+										}
+
+										// Save full details to a file
+										detailsJSON, _ := json.MarshalIndent(message, "", "  ")
+										filename := filepath.Join(logDir, fmt.Sprintf("challenge_response_%d.json", i))
+										if err := ioutil.WriteFile(filename, detailsJSON, 0644); err != nil {
+											log.Printf("Error saving challenge details: %v", err)
+										} else {
+											fmt.Printf("Full details saved to: %s\n", filename)
+										}
+
+										fmt.Println()
+
+										// Special handling for pass-challenge responses
+										if strings.Contains(respURL, "pass-challenge") {
+											fmt.Printf("\n!!! PASS-CHALLENGE RESPONSE DETECTED !!!\n")
+											fmt.Printf("URL: %s\n", respURL)
+
+											if headers, ok := response["headers"].(map[string]interface{}); ok {
+												fmt.Println("=== COOKIE INFORMATION ===")
+
+												// Check for Set-Cookie with different case variations
+												cookieFound := false
+												for k, v := range headers {
+													if strings.ToLower(k) == "set-cookie" {
+														fmt.Printf("SET-COOKIE HEADER: %v\n", v)
+														cookieFound = true
+													}
+												}
+
+												if !cookieFound {
+													fmt.Println("No Set-Cookie header found in this response")
+												}
+											}
+										}
+									}
+
+								}
+							}
 						}
 					}
-				} else {
-					fmt.Printf("Error making direct challenge request: %v\n", err)
 				}
 			}
 		}
-		
-		// Also try with ChromeDP
-		err = chromedp.Run(ctx,
-			chromedp.Navigate(challengeURL),
-			chromedp.Sleep(randomDuration(5, 8)),
-			simulateHumanBehavior(ctx),
-		)
-		if err != nil {
-			fmt.Printf("Error navigating to challenge URL: %v\n", err)
-		}
 	}
 
-	// Wait for challenge to be processed with periodic checks
-	maxWaitTime := 60 * time.Second
-	checkInterval := 3 * time.Second
-	startTime := time.Now()
-	
-	for time.Since(startTime) < maxWaitTime {
-		if passChallengeResponded {
-			fmt.Println("Challenge response received, continuing...")
-			break
-		}
-		
-		fmt.Println("Waiting for challenge to complete...")
-		
-		// Perform some random mouse movements and scrolling while waiting
-		err = chromedp.Run(ctx, simulateHumanBehavior(ctx))
-		if err != nil {
-			fmt.Printf("Error during human simulation: %v\n", err)
-		}
-		
-		time.Sleep(checkInterval)
-		
-		// Check if we're on the expected page
-		var currentURL string
-		err = chromedp.Run(ctx, chromedp.Location(&currentURL))
-		if err == nil {
-			fmt.Printf("Current URL: %s\n", currentURL)
-			if currentURL == url && !strings.Contains(currentURL, "challenge") {
-				fmt.Println("Successfully reached target URL")
-				break
-			}
-		}
-	}
-
-	// Final check to see if we're on the expected page
-	var pageContent string
-	err = chromedp.Run(ctx,
-		chromedp.WaitVisible(`body`, chromedp.ByQuery),
-		chromedp.OuterHTML(`html`, &pageContent),
-	)
+	// Check if we're on the expected page
+	currentURL, err := wd.CurrentURL()
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Output challenge-related transactions
-	fmt.Println("\n=== Challenge Requests ===")
-	for _, req := range challengeRequests {
-		fmt.Println(req)
-	}
-
-	fmt.Println("\n=== Challenge Responses ===")
-	for _, resp := range challengeResponses {
-		fmt.Println(resp)
-	}
-
-	fmt.Println("\n=== Challenge Status ===")
-	fmt.Printf("Pass-Challenge Requested: %v\n", passChallengeRequested)
-	fmt.Printf("Pass-Challenge Responded: %v\n", passChallengeResponded)
-
-	// Output a portion of the page content to verify we're on the right page
-	if len(pageContent) > 200 {
-		fmt.Println("\n=== Page Content Preview ===")
-		fmt.Println(pageContent[:200] + "...")
+		log.Printf("Error getting current URL: %v", err)
 	} else {
-		fmt.Println("\n=== Page Content ===")
-		fmt.Println(pageContent)
+		fmt.Printf("\nCurrent URL: %s\n", currentURL)
 	}
-}
 
-func simulateHumanBehavior(ctx context.Context) chromedp.Tasks {
-	return chromedp.Tasks{
-		// Random mouse movements
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Get viewport dimensions
-			var width, height int64
-			if err := chromedp.Evaluate(`[window.innerWidth, window.innerHeight]`, &[]int64{width, height}).Do(ctx); err != nil {
-				width, height = 1000, 800 // fallback values
-			}
-			
-			// Perform 3-7 random mouse movements
-			numMovements := rand.Intn(5) + 3
-			for i := 0; i < numMovements; i++ {
-				x := rand.Float64() * float64(width)
-				y := rand.Float64() * float64(height)
-				
-				if err := input.DispatchMouseEvent(
-					input.MouseMoved,
-					float64(x),
-					float64(y),
-				).Do(ctx); err != nil {
-					return err
-				}
-				
-				// Random delay between mouse movements
-				time.Sleep(randomDuration(0.1, 0.5))
-			}
-			return nil
-		}),
-		
-		// Random scrolling
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Scroll down randomly
-			scrollAmount := rand.Intn(500) + 100
-			if err := chromedp.Evaluate(fmt.Sprintf(`window.scrollBy(0, %d)`, scrollAmount), nil).Do(ctx); err != nil {
-				return err
-			}
-			
-			time.Sleep(randomDuration(0.5, 1.5))
-			
-			// Sometimes scroll back up
-			if rand.Float64() > 0.5 {
-				upAmount := rand.Intn(scrollAmount)
-				if err := chromedp.Evaluate(fmt.Sprintf(`window.scrollBy(0, %d)`, -upAmount), nil).Do(ctx); err != nil {
-					return err
-				}
-			}
-			
-			return nil
-		}),
-		
-		// Random delay
-		chromedp.Sleep(randomDuration(1, 3)),
+	// Get page source to verify content
+	pageSource, err := wd.PageSource()
+	if err != nil {
+		log.Printf("Error getting page source: %v", err)
+	} else {
+		// Save page source to file for inspection
+		err = os.WriteFile("lkml_page.html", []byte(pageSource), 0644)
+		if err != nil {
+			log.Printf("Error saving page source: %v", err)
+		}
+
+		// Print a preview
+		if len(pageSource) > 200 {
+			fmt.Println("\n=== Page Content Preview ===")
+			fmt.Println(pageSource[:200] + "...")
+		} else {
+			fmt.Println("\n=== Page Content ===")
+			fmt.Println(pageSource)
+		}
 	}
+
+	// Try to get the Chrome DevTools Protocol logs using Chrome's logging capabilities
+	if logs, err := wd.Log("browser"); err == nil {
+		fmt.Printf("\n=== Browser Logs (%d entries) ===\n", len(logs))
+		for i, log := range logs {
+			fmt.Printf("%d. [%s] %s: %s\n", i+1, log.Timestamp, log.Level, log.Message)
+		}
+	} else {
+		log.Printf("Error getting browser logs: %v", err)
+	}
+
+	// Get final cookies before closing
+	fmt.Println("\n=== Final Browser Cookies ===")
+	finalCookies, err := wd.GetCookies()
+	if err != nil {
+		log.Printf("Error getting final cookies: %v", err)
+	} else {
+		for i, cookie := range finalCookies {
+			fmt.Printf("%d. %s = %s\n", i+1, cookie.Name, cookie.Value)
+			fmt.Printf("   Domain: %s, Path: %s\n", cookie.Domain, cookie.Path)
+			fmt.Printf("   Secure: %t, Expiry: %v\n",
+				cookie.Secure, time.Unix(int64(cookie.Expiry), 0))
+			fmt.Println()
+		}
+	}
+
+	fmt.Println("\nBrowser automation completed.")
 }
 
-// randomDuration returns a random duration between min and max seconds
-func randomDuration(min, max float64) time.Duration {
-	return time.Duration((min + rand.Float64()*(max-min)) * float64(time.Second))
-}
+func simulateHumanBehavior(wd selenium.WebDriver) {
+	// Scroll down slowly
+	script := `window.scrollBy(0, 300);`
+	_, err := wd.ExecuteScript(script, nil)
+	if err != nil {
+		log.Printf("Error scrolling: %v", err)
+	}
+	time.Sleep(2 * time.Second)
 
+	// Scroll up a bit
+	script = `window.scrollBy(0, -100);`
+	_, err = wd.ExecuteScript(script, nil)
+	if err != nil {
+		log.Printf("Error scrolling: %v", err)
+	}
+	time.Sleep(1 * time.Second)
+
+	// Try to find and click on a link
+	elements, err := wd.FindElements(selenium.ByCSSSelector, "a")
+	if err != nil {
+		log.Printf("Error finding links: %v", err)
+	} else if len(elements) > 0 {
+		// Click on a random link (but not the first few which might be navigation)
+		index := 5
+		if len(elements) > 10 {
+			index = 10
+		}
+		if index < len(elements) {
+			if err := elements[index].Click(); err != nil {
+				log.Printf("Error clicking link: %v", err)
+			}
+			time.Sleep(3 * time.Second)
+
+			// Go back
+			if err := wd.Back(); err != nil {
+				log.Printf("Error navigating back: %v", err)
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	// Wait a bit more
+	time.Sleep(3 * time.Second)
+}
