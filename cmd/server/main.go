@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/alexmorten/patchy/db"
@@ -11,63 +12,92 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// func main() {
-// 	client := meilisearch.New("http://localhost:7700")
-
-// 	searchRes, err := client.Index("documents").Search("example",
-// 		&meilisearch.SearchRequest{
-// 			AttributesToHighlight: []string{"Text"},
-// 			Limit:                 10,
-// 		})
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		os.Exit(1)
-// 	}
-// 	b, err := searchRes.MarshalJSON()
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(string(b))
-// }
-
 func main() {
-	// Parse command line flags
-	domain := flag.String("domain", "", "Domain name for HTTPS with Let's Encrypt (e.g., example.com)")
-	flag.Parse()
-
-	// Also check environment variable if flag is not provided
-	if *domain == "" {
-		*domain = os.Getenv("DOMAIN")
-	}
-
-	if *domain != "" {
-		fmt.Printf("Starting server with autocert for domain: %s\n", *domain)
+	domain := getDomain()
+	
+	if domain != "" {
+		fmt.Printf("Starting server with autocert for domain: %s\n", domain)
 	} else {
 		fmt.Println("Starting server in HTTP mode (no domain provided)")
 	}
-
-	// Get database connection string from environment variable or use default
-	connString := os.Getenv("POSTGRES_CONNECTION_STRING")
-	if connString == "" {
-		connString = "postgresql://localhost:5432/patchy"
+	
+	dbPool := setupDatabaseConnection()
+	defer dbPool.Close()
+	
+	frontendDir := getFrontendDir()
+	meilisearchURL := getEnvOrDefault("MEILISEARCH_URL", "http://localhost:7700")
+	certCacheDir := getEnvOrDefault("CERT_CACHE_DIR", "certs")
+	host := getEnvOrDefault("HOST", "0.0.0.0")
+	port := getEnvOrDefault("PORT", "7788")
+	
+	querier := db.New(dbPool)
+	
+	config := server.ServerConfig{
+		Domain:         domain,
+		Querier:        querier,
+		FrontendDir:    frontendDir,
+		MeilisearchURL: meilisearchURL,
+		CertCacheDir:   certCacheDir,
+		Host:           host,
+		Port:           port,
 	}
-
-	config, err := pgxpool.ParseConfig(connString)
-	if err != nil {
-		panic(err)
+	
+	srv := server.NewServer(config)
+	
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
+}
 
-	// Set reasonable pool size limits
-	config.MaxConns = 10
-	config.MinConns = 2
+func getDomain() string {
+	domain := flag.String("domain", "", "Domain name for HTTPS with Let's Encrypt (e.g., example.com)")
+	flag.Parse()
+	
+	if *domain == "" {
+		return os.Getenv("DOMAIN")
+	}
+	return *domain
+}
 
+
+func setupDatabaseConnection() *pgxpool.Pool {
+	connString := getConnectionString()
+	config := createPoolConfig(connString)
+	
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer pool.Close()
+	
+	return pool
+}
 
-	querier := db.New(pool)
-	s := server.NewServer(*domain, querier)
-	fmt.Println(s.ListenAndServe())
+func getEnvOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func getFrontendDir() string {
+	if _, err := os.Stat("/app/frontend/dist"); err == nil {
+		return "/app/frontend/dist"
+	}
+	return "./frontend/dist"
+}
+
+func getConnectionString() string {
+	return getEnvOrDefault("POSTGRES_CONNECTION_STRING", "postgresql://localhost:5432/patchy")
+}
+
+func createPoolConfig(connString string) *pgxpool.Config {
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		log.Fatalf("Invalid database connection string: %v", err)
+	}
+	
+	config.MaxConns = 10
+	config.MinConns = 2
+	
+	return config
 }

@@ -14,121 +14,122 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
+type ServerConfig struct {
+	Domain          string
+	Querier         *db.Queries
+	FrontendDir     string
+	MeilisearchURL  string
+	CertCacheDir    string
+	Host            string
+	Port            string
+}
+
 type Server struct {
-	querier         *db.Queries
+	config          ServerConfig
 	searchClient    meilisearch.ServiceManager
-	domain          string
 	sanitizerPolicy *bluemonday.Policy
-	frontendDir     string
-	certCacheDir    string // Added field for configurable certificate cache directory
 }
 
-func NewServer(domain string, querier *db.Queries) *Server {
-	// Default frontend directory for development
-	frontendDir := "./frontend/dist"
-
-	// Check if we're running in a Docker container
-	if _, err := os.Stat("/app/frontend/dist"); err == nil {
-		frontendDir = "/app/frontend/dist"
-	}
-	fmt.Println("Frontend directory:", frontendDir)
-
-	// Use environment variables if provided
-	meilisearchURL := "http://localhost:7700"
-	if envURL := os.Getenv("MEILISEARCH_URL"); envURL != "" {
-		meilisearchURL = envURL
-	}
-
-	// Get certificate cache directory from environment variable or use default
-	certCacheDir := "certs"
-	if envCertDir := os.Getenv("CERT_CACHE_DIR"); envCertDir != "" {
-		certCacheDir = envCertDir
-	}
-
+func NewServer(config ServerConfig) *Server {
 	return &Server{
-		domain:          domain,
-		querier:         querier,
-		searchClient:    meilisearch.New(meilisearchURL),
+		config:          config,
+		searchClient:    meilisearch.New(config.MeilisearchURL),
 		sanitizerPolicy: bluemonday.NewPolicy().AllowElements("em", "mark"),
-		frontendDir:     frontendDir,
-		certCacheDir:    certCacheDir,
 	}
 }
+
+
 
 func (s *Server) ListenAndServe() error {
-	mux := http.NewServeMux()
-
-	// API routes
-	s.addSearchRoutes(mux)
-	s.addResultRoutes(mux)
-
-	// Serve frontend static files
-	mux.HandleFunc("/", s.serveStaticFiles())
-
-	handler := corsMiddleware(mux)
-
-	// Check if domain is provided to enable HTTPS with autocert
-	if s.domain != "" {
+	handler := s.setupRoutes()
+	
+	if s.config.Domain != "" {
 		return s.serveHTTPS(handler)
 	}
-
-	// Otherwise, serve regular HTTP
-	host := os.Getenv("HOST")
-	if host == "" {
-		host = "0.0.0.0"
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "7788"
-	}
-
-	fmt.Printf("Starting HTTP server on %s:%s\n", host, port)
-	return http.ListenAndServe(host+":"+port, handler)
+	
+	return s.serveHTTP(handler)
 }
 
-// serveHTTPS sets up an HTTPS server with automatic certificate management via Let's Encrypt
+func (s *Server) setupRoutes() http.Handler {
+	mux := http.NewServeMux()
+	s.addSearchRoutes(mux)
+	s.addResultRoutes(mux)
+	mux.HandleFunc("/", s.serveStaticFiles())
+	return corsMiddleware(mux)
+}
+
+func (s *Server) serveHTTP(handler http.Handler) error {
+	addr := fmt.Sprintf("%s:%s", s.config.Host, s.config.Port)
+	fmt.Printf("Starting HTTP server on %s\n", addr)
+	return http.ListenAndServe(addr, handler)
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func (s *Server) serveHTTPS(handler http.Handler) error {
-	// Create certificate cache directory if it doesn't exist
-	if err := os.MkdirAll(s.certCacheDir, 0700); err != nil {
-		return fmt.Errorf("failed to create cert cache directory '%s': %v", s.certCacheDir, err)
+	if err := s.ensureCertDir(); err != nil {
+		return err
 	}
-	fmt.Printf("Using certificate cache directory: %s\n", s.certCacheDir)
+	
+	certManager := s.createCertManager()
+	httpsServer := s.createHTTPSServer(handler, certManager)
+	httpServer := s.createRedirectServer(certManager)
+	
+	s.startHTTPRedirectServer(httpServer)
+	return s.startHTTPSServer(httpsServer)
+}
 
-	// Set up the autocert manager
-	certManager := autocert.Manager{
+func (s *Server) ensureCertDir() error {
+	if err := os.MkdirAll(s.config.CertCacheDir, 0700); err != nil {
+		return fmt.Errorf("failed to create cert cache directory '%s': %v", s.config.CertCacheDir, err)
+	}
+	return nil
+}
+
+func (s *Server) createCertManager() *autocert.Manager {
+	manager := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(s.domain),  // Only allow our domain
-		Cache:      autocert.DirCache(s.certCacheDir), // Use the configurable cert directory
+		HostPolicy: autocert.HostWhitelist(s.config.Domain),
+		Cache:      autocert.DirCache(s.config.CertCacheDir),
 	}
+	return manager
+}
 
-	// Set up the HTTPS server
-	httpsServer := &http.Server{
+func (s *Server) createHTTPSServer(handler http.Handler, certManager *autocert.Manager) *http.Server {
+	return &http.Server{
 		Addr:    ":443",
 		Handler: handler,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
-			MinVersion:     tls.VersionTLS12, // Improve cert reputation score
+			MinVersion:     tls.VersionTLS12,
 		},
 	}
+}
 
-	// Set up an HTTP server to redirect to HTTPS and handle ACME challenges
-	httpServer := &http.Server{
+func (s *Server) createRedirectServer(certManager *autocert.Manager) *http.Server {
+	return &http.Server{
 		Addr:    ":80",
 		Handler: certManager.HTTPHandler(http.HandlerFunc(redirectToHTTPS)),
 	}
+}
 
-	// Start HTTP server in a goroutine
+func (s *Server) startHTTPRedirectServer(server *http.Server) {
 	go func() {
 		fmt.Printf("Starting HTTP server for ACME challenges and redirects on port 80\n")
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("HTTP server error: %v", err)
 		}
 	}()
+}
 
-	// Start HTTPS server
-	fmt.Printf("Starting HTTPS server for domain %s on port 443\n", s.domain)
-	return httpsServer.ListenAndServeTLS("", "") // Certificates come from Let's Encrypt
+func (s *Server) startHTTPSServer(server *http.Server) error {
+	fmt.Printf("Starting HTTPS server for domain %s on port 443\n", s.config.Domain)
+	return server.ListenAndServeTLS("", "")
 }
 
 // redirectToHTTPS redirects HTTP requests to HTTPS
@@ -137,42 +138,45 @@ func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, httpsURL, http.StatusMovedPermanently)
 }
 
-// serveStaticFiles returns a handler that serves static files from the frontend build directory
 func (s *Server) serveStaticFiles() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// First, try to serve the requested path as a file
-		path := filepath.Join(s.frontendDir, r.URL.Path)
-
-		// Check if the file exists
-		if _, err := os.Stat(path); err == nil {
-			http.ServeFile(w, r, path)
+		requestedPath := filepath.Join(s.config.FrontendDir, r.URL.Path)
+		
+		if s.fileExists(requestedPath) {
+			http.ServeFile(w, r, requestedPath)
 			return
 		}
-
-		// For SPA (Single Page Application) routing, serve index.html for paths that don't match files
-		indexPath := filepath.Join(s.frontendDir, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
+		
+		indexPath := filepath.Join(s.config.FrontendDir, "index.html")
+		if s.fileExists(indexPath) {
 			http.ServeFile(w, r, indexPath)
 			return
 		}
-
-		// If index.html doesn't exist, return 404
+		
 		http.NotFound(w, r)
 	}
 }
 
+func (s *Server) fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
+		setCORSHeaders(w)
+		
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
+		
 		next.ServeHTTP(w, r)
 	})
+}
+
+func setCORSHeaders(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
